@@ -13,7 +13,7 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password_hash: str = Field(..., description="Пароль")
+    password: str = Field(..., description="Пароль")
 
 
 class UserResponse(UserBase):
@@ -22,3 +22,20 @@ class UserResponse(UserBase):
 
     class Config:
         orm_mode = True
+
+
+class Token(BaseModel):
+    access_token: str = Field(
+        ...,
+        description="JWT-токен для аутентификации",
+        example="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xxxxx"
+    )
+    token_type: str = Field(
+        "bearer",
+        description="Тип токена (по умолчанию 'bearer')",
+        example="bearer"
+    )
+    expires_in: Optional[int] = Field(
+        None,
+        description="Время жизни токена в секундах (опционально)"
+    )
