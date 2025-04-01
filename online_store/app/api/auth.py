@@ -9,7 +9,7 @@ import uuid
 from online_store.app.config import API_VERSION, AUTH_ENDPOINT
 from online_store.app.db.models import User
 from online_store.app.db.base import get_db
-from online_store.app.schema.auth_schema import Token, UserCreate, UserResponse
+from online_store.app.schema.auth_schema import TokenResponse, UserCreate, UserResponse
 
 
 auth_router = APIRouter(prefix='/auth', tags=['auth'])
@@ -51,8 +51,7 @@ def get_current_user(
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
-        # jti = payload.get('jti')
-        if username is None:
+        if not username:
             raise HTTPException(status_code=401, detail="Не авторизован")
     except JWTError:
         raise HTTPException(status_code=401, detail="Не авторизован1")
@@ -63,7 +62,7 @@ def get_current_user(
     return user
 
 
-@auth_router.post("/login", response_model=Token)
+@auth_router.post("/login", response_model=TokenResponse)
 async def login(
     db: Session = Depends(get_db),
     credentials: OAuth2PasswordRequestForm = Depends()
@@ -76,7 +75,7 @@ async def login(
         raise UNAUTH_401
 
     access_token = create_token({'sub': user.username})
-    token = Token(access_token=access_token)
+    token = TokenResponse(access_token=access_token)
     return token
 
 

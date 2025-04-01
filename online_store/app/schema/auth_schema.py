@@ -24,7 +24,7 @@ class UserResponse(UserBase):
         orm_mode = True
 
 
-class Token(BaseModel):
+class TokenResponse(BaseModel):
     access_token: str = Field(
         ...,
         description="JWT-токен для аутентификации",
