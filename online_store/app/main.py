@@ -13,6 +13,7 @@ if project_directory not in sys.path:
 
 from api.auth import auth_router
 from api.products import product_router
+from api.cart import cart_router
 from db.base import Base, engine
 
 
@@ -22,6 +23,7 @@ Base.metadata.create_all(bind=engine)
 v1_router = APIRouter(prefix='/v1', tags=['v1'])
 v1_router.include_router(auth_router)
 v1_router.include_router(product_router)
+v1_router.include_router(cart_router)
 
 
 app.include_router(v1_router)
@@ -34,7 +36,7 @@ async def welcome():
 if __name__ == '__main__':
     uvicorn.run(
         "main:app",
-        host="127.0.0.1",
+        host="0.0.0.0",
         port=8000,
         reload=True
     )

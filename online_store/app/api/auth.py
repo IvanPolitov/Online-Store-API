@@ -26,7 +26,7 @@ CRED_EXC = HTTPException(
         headers={'WWW-Authenticate': 'Bearer'}
     )
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 1
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
 SECRET_KEY = 'SECRET_KEY'
 ALGORITHM = "HS256"
 
@@ -109,8 +109,8 @@ async def register(
 
 
 @auth_router.get("/logout")
-async def logout(response: Response):
-    response
+async def logout():
+    
     return HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
