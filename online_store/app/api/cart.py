@@ -1,12 +1,9 @@
-from datetime import datetime
-from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from online_store.app.api.auth import get_current_user
 from online_store.app.db.base import get_db
 from online_store.app.db.models import Product, User, CartItem
-from online_store.app.schema.product_schema import ProductCreate, ProductResponse
 
 
 cart_router = APIRouter(prefix='/cart', tags=['cart'])
@@ -18,9 +15,9 @@ def add_product_to_cart(db: Session, user: User, product_id: int, quantity: int 
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise ValueError("Product not found")
+    
+    cart_item = db.query(CartItem).filter((CartItem.user_id == user_id) & (CartItem.product_id == product.id)).first()
 
-    cart_item = db.query(CartItem).filter((CartItem.user_id == user_id) and (CartItem.product_id == product_id)).first()
-    print(type(cart_item))
     if cart_item:
         cart_item.quantity += quantity
     else:
@@ -38,15 +35,10 @@ def get_user_cart(db: Session, user: User):
 
     user_id = user.id
 
-    # Получаем содержимое корзины
     cart_items = db.query(CartItem).filter(CartItem.user_id == user_id).all()
-    # await session.execute(
-    #     select(CartItem).where(CartItem.user_id == user_id).join(Product)
-    # )
-    # cart_items = cart_items.scalars().all()
     if not cart_items:
         raise HTTPException(
-            status_code=status.HTTP_404_BAD_REQUEST,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="No cart"
             )
     cart_contents = []
