@@ -1,4 +1,7 @@
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload,selectinload
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from online_store.app.db.models import User, Product, CartItem, Order, OrderItem
@@ -10,18 +13,24 @@ from online_store.app.api.cart import get_user_cart
 order_router = APIRouter(prefix="/orders", tags=["Orders"])
 
 
-def create_order_from_cart(db: Session, user: User):
+async def create_order_from_cart(db: AsyncSession, user: User):
 
-    cart_items = db.query(CartItem).filter(CartItem.user_id == user.id).join(Product).all()
-
+    # cart_items = db.query(CartItem).filter(CartItem.user_id == user.id).join(Product).all()
+    cart_items = await db.execute(
+        select(CartItem).filter(CartItem.user_id == user.id).join(Product).options(selectinload(CartItem.product))
+    )
+    cart_items = cart_items.scalars().all()
+    print(cart_items)
     if not cart_items:
         raise ValueError("Cart is empty")
 
     # Создаем заказ
     total_amount = sum(item.product.price * item.quantity for item in cart_items)
+    print(total_amount)
     order = Order(user_id=user.id, total_amount=total_amount)
+    print(order)
     db.add(order)
-    db.flush()
+    await db.flush()
 
     # Создаем элементы заказа
     for cart_item in cart_items:
@@ -33,19 +42,26 @@ def create_order_from_cart(db: Session, user: User):
         )
         db.add(order_item)
         db.delete(cart_item)  # Удаляем товар из корзины
-    db.commit()
+    await db.commit()
+    await db.refresh(order)
     return order
 
 
-async def get_user_orders(db: Session, user: User):
-
-
-    orders = db.query(Order).where(Order.user_id == user.id).join(OrderItem).join(Product).all()
+async def get_user_orders(db: AsyncSession, user: User):
+    # orders = db.query(Order).where(Order.user_id == user.id).join(OrderItem).join(Product).all()
+    orders = await db.execute(
+        select(Order).where(Order.user_id == user.id).join(OrderItem).join(Product).options(selectinload(Order.order_items).selectinload(OrderItem.product))
+    )
+    orders = orders.scalars().all()
 
     order_details = []
     for order in orders:
-        order_items = db.query(OrderItem).where(OrderItem.order_id == order.id).join(Product).all()
-
+        # order_items = db.query(OrderItem).where(OrderItem.order_id == order.id).join(Product).all()
+        order_items = await db.execute(
+                select(OrderItem).where(OrderItem.order_id == order.id).join(Product).options(selectinload(OrderItem.product))
+            )
+        order_items = order_items.scalars().all()
+        
         items = []
         for item in order_items:
             items.append({
@@ -70,17 +86,15 @@ async def get_user_orders(db: Session, user: User):
 
 
 @order_router.post("/", status_code=status.HTTP_201_CREATED)
-def create_order_endpoint(
+async def create_order_endpoint(
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     try:
-        order = create_order_from_cart(session, current_user)
+        order = await create_order_from_cart(db, current_user)
         return {
             "message": "Order created successfully",
-            "order_id": order.id,
-            "total_amount": order.total_amount,
-            "status": order.status.value
+            "oreder": order
         }
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
@@ -89,7 +103,7 @@ def create_order_endpoint(
 @order_router.get("/", status_code=status.HTTP_200_OK)
 async def get_user_orders_endpoint(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     try:
         orders = await get_user_orders(db, current_user)

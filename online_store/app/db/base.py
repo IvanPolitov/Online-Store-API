@@ -1,20 +1,15 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-#import psycopg2
+from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncAttrs, AsyncSession
+from online_store.app.config import settings
 
-from config import DB_DRIVER, DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER
-
-
+# работа с sqlite
 #SQL_DB_URL = 'sqlite:///./store.db'
+'''
+SQL_DB_URL = f'{DB_DRIVER}://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
 
-SQL_DB_URL = f'postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
 
-
-engine = create_engine(
-    url=SQL_DB_URL,
-    #connect_args={'check_same_thread': False}
-    )
+синхронный движок
+engine = create_engine(url=SQL_DB_URL)
 
 
 SessionLocal = sessionmaker(
@@ -22,6 +17,7 @@ SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False
     )
+
 Base = declarative_base()
 
 
@@ -31,3 +27,25 @@ def get_db():
         yield db
     finally:
         db.close()
+'''
+
+async_engine = create_async_engine(settings.get_db_url())
+async_session_maker = async_sessionmaker(async_engine, expire_on_commit=True)
+
+class Base(AsyncAttrs, DeclarativeBase):
+    __abstract__ = True
+
+
+async def get_db() -> AsyncSession:
+    async with async_session_maker() as session:
+        yield session
+
+
+async def create_db():
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
+async def drop_db():
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)

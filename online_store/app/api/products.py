@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from online_store.app.api.auth import get_current_user
 from online_store.app.db.base import get_db
@@ -12,21 +14,30 @@ product_router = APIRouter(prefix='/products', tags=['products'])
 
 
 @product_router.get('', response_model=List[ProductResponse])
-def get_all_products(
-    db: Session = Depends(get_db),
+async def get_all_products(
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return db.query(Product).all()
+    # return db.query(Product).all()
+    users = await db.execute(select(Product))
+    users = users.scalars().all()
+
+    return users
+
 
 
 @product_router.post('/create', response_model=ProductResponse)
-def create_product(
-    db: Session = Depends(get_db),
+async def create_product(
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     input_product: ProductCreate = None
 ):
-    product_check = db.query(Product).filter(
-        input_product.name == Product.name).first()
+    # product_check = db.query(Product).filter(
+    #     input_product.name == Product.name).first()
+    product_check = await db.execute(
+        select(Product).where(input_product.name == Product.name)
+    )
+    product_check = product_check.scalar()
 
     if product_check:
         raise HTTPException(
@@ -42,7 +53,7 @@ def create_product(
     )
 
     db.add(new_product)
-    db.commit()
-    db.refresh(new_product)
+    await db.commit()
+    await db.refresh(new_product)
 
     return new_product

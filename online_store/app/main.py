@@ -15,11 +15,12 @@ from api.auth import auth_router
 from api.products import product_router
 from api.cart import cart_router
 from api.orders import order_router
-from db.base import Base, engine
+from db.base import create_db
 
 
 app = FastAPI()
-Base.metadata.create_all(bind=engine)
+#Base.metadata.create_all(bind=async_engine)
+create_db()
 
 v1_router = APIRouter(prefix='/v1', tags=['v1'])
 v1_router.include_router(auth_router)

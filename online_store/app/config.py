@@ -1,9 +1,27 @@
+import os
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
 API_VERSION = "/v1"
 AUTH_ENDPOINT = "/auth/login"
 
-DB_DRIVER = 'postgresql+asyncpg'
-DB_USER = 'postgres'
-DB_PASSWORD = 'admin'
-DB_HOST = 'localhost'
-DB_PORT = 5432
-DB_NAME = 'postgres'
+
+class Settings(BaseSettings):
+    DB_USER: str
+    DB_DRIVER: str
+    DB_PASSWORD: str
+    DB_HOST: str
+    DB_PORT: int
+    DB_NAME: str
+    
+    # DATABASE_SQLITE = 'sqlite+aiosqlite:///data/db.sqlite3'
+    model_config = SettingsConfigDict(
+        env_file=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    )
+
+    def get_db_url(self):
+        return (f"{self.DB_DRIVER}://{self.DB_USER}:{self.DB_PASSWORD}@"
+                f"{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}")
+
+
+settings = Settings()

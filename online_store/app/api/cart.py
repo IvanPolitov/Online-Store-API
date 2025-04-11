@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from online_store.app.api.auth import get_current_user
 from online_store.app.db.base import get_db
@@ -9,14 +11,23 @@ from online_store.app.db.models import Product, User, CartItem
 cart_router = APIRouter(prefix='/cart', tags=['cart'])
 
 
-def add_product_to_cart(db: Session, user: User, product_id: int, quantity: int = 1):
+async def add_product_to_cart(db: AsyncSession, user: User, product_id: int, quantity: int = 1):
     user_id = user.id
 
-    product = db.query(Product).filter(Product.id == product_id).first()
+    # product = db.query(Product).filter(Product.id == product_id).first()
+    product = await db.execute(
+        select(Product).filter(Product.id == product_id)
+    )
+    product = product.scalar()
+
     if not product:
         raise ValueError("Product not found")
     
-    cart_item = db.query(CartItem).filter((CartItem.user_id == user_id) & (CartItem.product_id == product.id)).first()
+    # cart_item = db.query(CartItem).filter((CartItem.user_id == user_id) & (CartItem.product_id == product.id)).first()
+    cart_item = await db.execute(
+        select(CartItem).filter((CartItem.user_id == user_id) & (CartItem.product_id == product.id))
+        )
+    cart_item = cart_item.scalar()
 
     if cart_item:
         cart_item.quantity += quantity
@@ -27,15 +38,19 @@ def add_product_to_cart(db: Session, user: User, product_id: int, quantity: int 
             quantity=quantity
             )
         db.add(cart_item)
-    db.commit()
-    db.refresh(cart_item)
+    await db.commit()
+    await db.refresh(cart_item)
 
 
-def get_user_cart(db: Session, user: User):
+async def get_user_cart(db: AsyncSession, user: User):
 
     user_id = user.id
 
-    cart_items = db.query(CartItem).filter(CartItem.user_id == user_id).all()
+    # cart_items = db.query(CartItem).filter(CartItem.user_id == user_id).all()
+    cart_items = await db.execute(
+        select(CartItem).filter(CartItem.user_id == user_id).options(joinedload(CartItem.product))
+    )
+    cart_items = cart_items.scalars().all()
     if not cart_items:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -55,27 +70,27 @@ def get_user_cart(db: Session, user: User):
 
 
 @cart_router.post("/add/{product_id}", status_code=status.HTTP_201_CREATED)
-def add_product_to_cart_endpoint(
+async def add_product_to_cart_endpoint(
     product_id: int,
     quantity: int = 1,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     try:
-        add_product_to_cart(db, current_user, product_id, quantity)
+        await add_product_to_cart(db, current_user, product_id, quantity)
         return {"message": "Product added to cart"}
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
     
 
 @cart_router.get("/", status_code=status.HTTP_200_OK)
-def get_user_cart_endpoint(
+async def get_user_cart_endpoint(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     try:
-        cart_contents = get_user_cart(db, current_user)
+        cart_contents = await get_user_cart(db, current_user)
         return cart_contents
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
     

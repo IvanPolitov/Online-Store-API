@@ -3,8 +3,10 @@ from typing import Dict
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from jose import JWTError, jwt
 import uuid
+from sqlalchemy import select
 
 from online_store.app.config import API_VERSION, AUTH_ENDPOINT
 from online_store.app.db.models import User
@@ -31,11 +33,11 @@ SECRET_KEY = 'SECRET_KEY'
 ALGORITHM = "HS256"
 
 
-def password_hash(password: str) -> str:
+async def password_hash(password: str) -> str:
     return password
 
 
-def create_token(data: Dict) -> str:
+async def create_token(data: Dict) -> str:
     to_encode = data.copy()
     jti = str(uuid.uuid4())
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -44,8 +46,8 @@ def create_token(data: Dict) -> str:
     return token
 
 
-def get_current_user(
-        db: Session = Depends(get_db),
+async def get_current_user(
+        db: AsyncSession = Depends(get_db),
         token: str = Depends(oauth2_schema)
         ) -> User:
     try:
@@ -56,7 +58,12 @@ def get_current_user(
     except JWTError:
         raise HTTPException(status_code=401, detail="Не авторизован1")
 
-    user = db.query(User).filter(User.username == username).first()
+    # user = db.query(User).filter(User.username == username).first()
+    user = await db.execute(
+        select(User).where(User.username == username)
+    )
+    user = user.scalars().first()
+
     if not user:
         raise HTTPException(status_code=401, detail="Пользователь не найден")
     return user
@@ -64,17 +71,23 @@ def get_current_user(
 
 @auth_router.post("/login", response_model=TokenResponse)
 async def login(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     credentials: OAuth2PasswordRequestForm = Depends()
 ):
-    user = db.query(User).filter(credentials.username == User.username).first()
+    
+    # user = db.query(User).filter(credentials.username == User.username).first()
+    user = await db.execute(
+        select(User).where(credentials.username == User.username)
+    )
+    user = user.scalars().first()
+    
     if not user:
         raise UNAUTH_401
 
-    if user.password_hash != password_hash(credentials.password):
+    if user.password_hash != await password_hash(credentials.password):
         raise UNAUTH_401
 
-    access_token = create_token({'sub': user.username})
+    access_token = await create_token({'sub': user.username})
     token = TokenResponse(access_token=access_token)
     return token
 
@@ -84,10 +97,11 @@ async def register(
     credentials: UserCreate,
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(
-        (User.username == credentials.username) |
-        (User.email == credentials.email)
-        ).first()
+
+    user = await db.execute(
+        select(User).where((credentials.username == User.username) | (User.email == credentials.email))
+    )
+    user = user.scalars().first()
 
     if user:
         raise HTTPException(
@@ -99,12 +113,12 @@ async def register(
         username=credentials.username,
         email=credentials.email,
         age=credentials.age,
-        password_hash=password_hash(credentials.password),
+        password_hash=await password_hash(credentials.password),
         created_at=datetime.now()
     )
     db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    await db.commit()
+    await db.refresh(new_user)
     return new_user
 
 
